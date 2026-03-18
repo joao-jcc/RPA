@@ -2,7 +2,6 @@
 FastAPI Dashboard Backend
 Main application entry point.
 """
-
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +20,6 @@ def create_app() -> FastAPI:
         docs_url=f"{settings.API_PREFIX}/docs",
     )
 
-    # CORS middleware to allow requests from any origin TODO: understand why this is needed
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -30,7 +28,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Include API router
     app.include_router(api_router, prefix=settings.API_PREFIX)
 
     @app.get("/")
