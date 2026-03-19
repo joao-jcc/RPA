@@ -1,15 +1,12 @@
-"""Rotas v1 — RPA Portal da Transparência.
-
-Registrar no app principal:
-    from app.v1.rpa import router as rpa_router
-    app.include_router(rpa_router, prefix="/v1/rpa", tags=["RPA"])
-"""
+"""Rotas v1 — RPA Portal da Transparência."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.schemas.persona import PersonaResponse
+from app.services.google.drive_storage import GoogleDriveStorage
 from app.services.rpa.exceptions import (
+    DownloadFailedException,
     PersonNotFoundException,
     PortalTimeoutException,
 )
@@ -19,13 +16,8 @@ router = APIRouter()
 
 
 def get_service() -> PersonaService:
-    """Dependency injection — settings.RPA_* já são lidos no PersonaService.
-
-    Para usar GCSStorage em produção, sobrescreva aqui:
-        bucket = gcs.Client().bucket(settings.GCS_BUCKET)
-        return PersonaService(storage=GCSStorage(bucket))
-    """
-    return PersonaService()
+    """Token único por instalação — sem CPF, sem login."""
+    return PersonaService(storage=GoogleDriveStorage())
 
 
 @router.get(
@@ -53,18 +45,22 @@ def get_persona(
 @router.post(
     "/persona/{termo}/save",
     response_model=PersonaResponse,
-    summary="Consulta e persiste no storage configurado",
+    summary="Consulta e salva no Google Drive do usuário",
     responses={
         404: {"description": "Nenhum resultado encontrado"},
         504: {"description": "Timeout no portal"},
-        502: {"description": "Falha ao persistir os arquivos"},
+        502: {"description": "Falha ao salvar no Drive"},
     },
 )
 def save_persona(
     termo: str,
     service: PersonaService = Depends(get_service),
 ) -> PersonaResponse:
-    """Busca e salva person.json + screenshot no storage (local ou GCS)."""
+    """Busca e salva person.json + screenshot no Google Drive.
+
+    Na primeira execução desta instalação, abre o browser para autorização OAuth2.
+    Nas seguintes, usa o token salvo silenciosamente.
+    """
     try:
         response, _ = service.fetch_and_save(termo)
         return response
@@ -72,3 +68,5 @@ def save_persona(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PortalTimeoutException as exc:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(exc))
+    except DownloadFailedException as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
