@@ -1,3 +1,3 @@
-from .persona import BenefitRow, Links, PersonaResponse
+from .persona import Benefit, BenefitRow, Links, PersonaResponse
 
-__all__ = ["PersonaResponse", "BenefitRow", "Links"]
+__all__ = ["PersonaResponse", "Benefit", "BenefitRow", "Links"]
