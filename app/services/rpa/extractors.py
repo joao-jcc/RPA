@@ -36,7 +36,7 @@ def navigate_to_result(page: Page, termo: str) -> None:
     Raises:
         PersonNotFoundException: nenhum resultado encontrado.
     """
-    page.goto(f"{URL_BASE}/pessoa-fisica/busca/lista", wait_until="networkidle")
+    page.goto(f"{URL_BASE}/pessoa-fisica/busca/lista", wait_until="domcontentloaded")
     page.wait_for_timeout(5_000)
     accept_cookies(page)
 

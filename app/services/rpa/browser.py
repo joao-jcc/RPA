@@ -20,7 +20,7 @@ class BrowserManager:
                 page.goto(...)
     """
 
-    def __init__(self, headless: bool = True, timeout_ms: int = 60_000) -> None:
+    def __init__(self, headless: bool = True, timeout_ms: int = 120_000) -> None:
         self.headless = headless
         self.timeout_ms = timeout_ms
         self._playwright = None
