@@ -1,6 +1,6 @@
 """persona_scraper — Portal da Transparência scraping package."""
 
-from app.schemas.persona import BenefitRow, Links, PersonaResponse
+from app.schemas.persona import Benefit, Links, PersonaResponse
 from .exceptions import PersonNotFoundException, PortalTimeoutException
 from .models import PersonaData
 from .service import PersonaService
@@ -10,7 +10,7 @@ __all__ = [
     "PersonaService",
     "PersonaResponse",
     "PersonaData",
-    "BenefitRow",
+    "Benefit",
     "Links",
     "BaseStorage",
     "LocalStorage",

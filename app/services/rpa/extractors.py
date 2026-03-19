@@ -8,11 +8,15 @@ from __future__ import annotations
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from app.schemas.persona import Benefit, BenefitRow
+from app.schemas.persona import Benefit
 from .exceptions import PersonNotFoundException, PortalTimeoutException
 from .models import PersonaData
 
 URL_BASE = "https://portaldatransparencia.gov.br"
+
+# Seletor genérico — primeira <table> dentro de qualquer seção de detalhe.
+# Não depende de ids específicos de tabela ou accordion.
+_DETAIL_TABLE_SELECTOR = ".content table"
 
 
 # ── Navegação ─────────────────────────────────────────────────────────────────
@@ -116,7 +120,7 @@ def _discover_benefit_sections(page: Page) -> list[dict[str, str]]:
     return sections
 
 
-def _extract_detail_rows(page: Page) -> list[BenefitRow]:
+def _extract_detail_rows(page: Page) -> list[dict[str, str]]:
     """Extrai todas as linhas da tabela de detalhe do benefício.
 
     1. Expande qualquer item de accordion fechado na página
@@ -132,7 +136,7 @@ def _extract_detail_rows(page: Page) -> list[BenefitRow]:
 
     # Aguarda a tabela aparecer
     try:
-        page.wait_for_selector(".content table", timeout=10_000)
+        page.wait_for_selector(_DETAIL_TABLE_SELECTOR, timeout=10_000)
         page.wait_for_timeout(1_000)
     except PlaywrightTimeoutError:
         return []
@@ -147,7 +151,7 @@ def _extract_detail_rows(page: Page) -> list[BenefitRow]:
             pass
 
     # Lê a tabela com headers dinâmicos
-    table = page.locator(".content table").first
+    table = page.locator(_DETAIL_TABLE_SELECTOR).first
 
     headers = [
         th.inner_text().strip()
@@ -157,7 +161,7 @@ def _extract_detail_rows(page: Page) -> list[BenefitRow]:
     if not headers:
         return []
 
-    rows: list[BenefitRow] = []
+    rows: list[dict[str, str]] = []
     for row in table.locator("tbody tr").all():
         cells = [
             (
@@ -174,7 +178,7 @@ def _extract_detail_rows(page: Page) -> list[BenefitRow]:
             for i in range(min(len(headers), len(cells)))
             if headers[i]
         }
-        rows.append(BenefitRow(columns=columns))
+        rows.append(columns)
 
     return rows
 

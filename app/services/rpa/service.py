@@ -73,7 +73,7 @@ class PersonaService:
 if __name__ == "__main__":
     service = PersonaService()
     try:
-        response, uri = service.fetch_and_save("DILA DA SILVA BRITO LIMA")
+        response, uri = service.fetch_and_save(" AI PIRAHA")
     except PersonNotFoundException as exc:
         print(f"Não encontrado: {exc}")
     except PortalTimeoutException as exc:

@@ -9,27 +9,22 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
-class BenefitRow(BaseModel):
-    """Uma linha da tabela de detalhe de um benefício.
-
-    As colunas variam por tipo de benefício — armazenadas como dict livre.
-    A chave é o header da coluna, o valor é o conteúdo da célula.
-
-    Exemplo Auxílio Emergencial:
-        {"Mês de disponibilização": "09/2021", "Parcela": "15ª", "Valor (R$)": "250,00"}
-
-    Exemplo Novo Bolsa Família:
-        {"Mês Folha": "01/2026", "Mês Referência": "01/2026", "Valor Parcela": "650,00"}
-    """
-    columns: dict[str, str] = Field(default_factory=dict)
-
-
 class Benefit(BaseModel):
-    """Um benefício social com seu sumário e linhas de detalhe."""
+    """Um benefício social com seu sumário e linhas de detalhe.
+
+    rows é um dict indexado por número de linha (str) — cada valor é um dict
+    de {header: valor} com as colunas daquela linha.
+
+    Exemplo:
+        {
+          "0": {"Mês Folha": "08/2022", "UF": "RJ", "Valor (R$)": "1.212,00"},
+          "1": {"Mês Folha": "07/2022", "UF": "RJ", "Valor (R$)": "1.212,00"}
+        }
+    """
     type: str = ""
     total_received: str = ""
     detail_url: str = ""
-    rows: list[BenefitRow] = Field(default_factory=list)
+    rows: list[dict[str, str]] = Field(default_factory=list)
 
 
 class Links(BaseModel):
