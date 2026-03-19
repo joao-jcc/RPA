@@ -1,14 +1,21 @@
+"""Extractors — leitura e extração de dados do Portal da Transparência.
+
+Cada função recebe uma Page já aberta e retorna dados estruturados.
+Nenhuma função aqui decide para onde navegar — isso é responsabilidade do scraper.
+"""
 from __future__ import annotations
 
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.schemas.persona import Benefit, BenefitRow
 from .exceptions import PersonNotFoundException, PortalTimeoutException
-from app.schemas.persona import BenefitRow
 from .models import PersonaData
 
 URL_BASE = "https://portaldatransparencia.gov.br"
 
+
+# ── Navegação ─────────────────────────────────────────────────────────────────
 
 def accept_cookies(page: Page) -> None:
     """Dismiss cookie banner if present — fire and forget."""
@@ -19,10 +26,11 @@ def accept_cookies(page: Page) -> None:
         pass
 
 
-def navigate_to_result(page: Page, termo: str) -> bool:
-    """Search for *termo* and open the first result.
+def navigate_to_result(page: Page, termo: str) -> None:
+    """Navega até o perfil da primeira pessoa encontrada para *termo*.
 
-    Returns True if a result was found and opened.
+    Raises:
+        PersonNotFoundException: nenhum resultado encontrado.
     """
     page.goto(f"{URL_BASE}/pessoa-fisica/busca/lista", wait_until="networkidle")
     page.wait_for_timeout(5_000)
@@ -42,15 +50,16 @@ def navigate_to_result(page: Page, termo: str) -> bool:
         page.wait_for_selector("#resultados .link-busca-nome", timeout=10_000)
         page.locator("#resultados .link-busca-nome").first.click()
         page.wait_for_load_state("networkidle")
-        return True
     except PlaywrightTimeoutError as exc:
         raise PersonNotFoundException(
             f"Nenhum resultado encontrado para o termo: '{termo}'."
         ) from exc
 
 
+# ── Extração de dados básicos ─────────────────────────────────────────────────
+
 def extract_basic_data(page: Page) -> dict[str, str]:
-    """Return name, cpf and location from the profile page."""
+    """Retorna name, cpf e location da página de perfil."""
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(3_000)
 
@@ -71,13 +80,14 @@ def extract_basic_data(page: Page) -> dict[str, str]:
 
 
 def open_accordion_recebimentos(page: Page) -> bytes:
-    """Expand the payments accordion and return a screenshot (PNG bytes)."""
+    """Expande o accordion de recebimentos e retorna screenshot PNG."""
     if page.locator("#accordion1 .item").first.get_attribute("active") is None:
         page.locator("#accordion1 .item .header").first.click()
 
     try:
         page.wait_for_selector(
-            "#accordion-recebimentos-recursos .box-ficha__resultados", timeout=10_000
+            "#accordion-recebimentos-recursos .box-ficha__resultados",
+            timeout=10_000,
         )
     except PlaywrightTimeoutError as exc:
         raise PortalTimeoutException(
@@ -86,93 +96,145 @@ def open_accordion_recebimentos(page: Page) -> bytes:
 
     accept_cookies(page)
     page.wait_for_timeout(2_000)
-    return page.screenshot(type="png")
+    return page.screenshot(type="png", full_page=True)
 
 
-def extract_recebimentos(page: Page) -> dict:
-    """Extract payment information.
+# ── Extração de benefícios ────────────────────────────────────────────────────
 
-    Tries two strategies in order:
-      1. Federal direct payments (#gastosDiretos)
-      2. Social benefit table + detail page
+def _discover_benefit_sections(page: Page) -> list[dict[str, str]]:
+    """Descobre dinamicamente todas as seções de benefício presentes no DOM."""
+    sections = []
+    for block in page.locator("#accordion-recebimentos-recursos .br-table").all():
+        name        = block.locator("strong").first.inner_text().strip()
+        btn         = block.locator("a.br-button").first
+        if btn.count() == 0:
+            continue
+        detail_href = btn.get_attribute("href") or ""
+        if not name or not detail_href:
+            continue
+        sections.append({"name": name, "detail_href": detail_href})
+    return sections
+
+
+def _extract_detail_rows(page: Page) -> list[BenefitRow]:
+    """Extrai todas as linhas da tabela de detalhe do benefício.
+
+    1. Expande qualquer item de accordion fechado na página
+    2. Aguarda a primeira <table> aparecer dentro de .content
+    3. Clica em 'Paginação completa' para carregar todos os registros
+    4. Lê headers e linhas dinamicamente — sem depender de ids fixos
     """
-    # Strategy 1 — direct federal payments
+    # Expande qualquer accordion fechado na página (sem depender de id)
+    for item in page.locator(".br-accordion .item").all():
+        if item.get_attribute("active") is None:
+            item.locator("button.header").click()
+            page.wait_for_timeout(1_000)
+
+    # Aguarda a tabela aparecer
     try:
-        total = page.locator("#gastosDiretos").evaluate(
-            "el => el.textContent.trim().split(':').pop().trim()",
-            timeout=5_000,
-        )
-        return {"total_received": total, "benefit_type": "", "detail_url": "", "benefit_rows": []}
+        page.wait_for_selector(".content table", timeout=10_000)
+        page.wait_for_timeout(1_000)
     except PlaywrightTimeoutError:
-        pass
+        return []
 
-    # Strategy 2 — social benefit
-    try:
-        benefit_type = (
-            page.locator("#accordion-recebimentos-recursos strong")
-            .first.inner_text()
-            .strip()
-        )
-        valor_cell = page.locator(
-            "#tabela-visao-geral-sancoes tbody tr td:nth-child(4)"
-        ).first
-        total_received = valor_cell.inner_text().strip()
+    # Carrega todos os registros de uma vez
+    btn = page.locator("#btnPaginacaoCompleta")
+    if btn.count() > 0:
+        try:
+            btn.click(timeout=3_000)
+            page.wait_for_timeout(2_000)
+        except Exception:
+            pass
 
-        page.locator("#btnDetalharBpc").click()
-        page.wait_for_load_state("networkidle")
-        detail_url = page.url
+    # Lê a tabela com headers dinâmicos
+    table = page.locator(".content table").first
 
-        btn = page.locator("[aria-controls='detalhe-disponibilizado']")
-        if btn.locator("..").get_attribute("active") is None:
-            btn.click()
+    headers = [
+        th.inner_text().strip()
+        for th in table.locator("thead th").all()
+        if th.inner_text().strip()
+    ]
+    if not headers:
+        return []
 
-        page.wait_for_selector("#tabelaDetalheDisponibilizado tbody tr", timeout=10_000)
-        page.wait_for_timeout(2_000)
-
-        rows = _extract_benefit_rows(page)
-        return {
-            "benefit_type": benefit_type,
-            "total_received": total_received,
-            "detail_url": detail_url,
-            "benefit_rows": rows,
-        }
-    except PlaywrightTimeoutError as exc:
-        raise PortalTimeoutException(
-            "Timeout ao aguardar tabela de detalhe do benefício social."
-        ) from exc
-
-
-def _extract_benefit_rows(page: Page) -> list[BenefitRow]:
     rows: list[BenefitRow] = []
-    for row in page.locator("#tabelaDetalheDisponibilizado tbody tr").all():
-        cols = row.locator("td span").all()
-        if len(cols) >= 6:
-            rows.append(
-                BenefitRow(
-                    mes=cols[0].inner_text().strip(),
-                    parcela=cols[1].inner_text().strip(),
-                    uf=cols[2].inner_text().strip(),
-                    municipio=cols[3].inner_text().strip(),
-                    enquadramento=cols[4].inner_text().strip(),
-                    valor=cols[5].inner_text().strip(),
-                    observacao=cols[6].inner_text().strip() if len(cols) > 6 else "",
-                )
+    for row in table.locator("tbody tr").all():
+        cells = [
+            (
+                td.locator("span").first.inner_text().strip()
+                if td.locator("span").count() > 0
+                else td.inner_text().strip()
             )
+            for td in row.locator("td").all()
+        ]
+        if not any(cells):
+            continue
+        columns = {
+            headers[i]: cells[i]
+            for i in range(min(len(headers), len(cells)))
+            if headers[i]
+        }
+        rows.append(BenefitRow(columns=columns))
+
     return rows
 
 
-def build_persona_data(page: Page, termo: str) -> PersonaData:
-    """Orchestrate all extractors and return a populated PersonaData."""
-    basic = extract_basic_data(page)
+def extract_all_benefits(page: Page) -> list[Benefit]:
+    """Detecta e extrai todos os benefícios sociais presentes — sem lista hardcoded."""
+    sections = _discover_benefit_sections(page)
+    if not sections:
+        return []
+
     profile_url = page.url
-    screenshot = open_accordion_recebimentos(page)
-    payments = extract_recebimentos(page)
+    benefits: list[Benefit] = []
+
+    for section in sections:
+        total_received = _extract_total_for_href(page, section["detail_href"])
+
+        page.goto(f"{URL_BASE}{section['detail_href']}", wait_until="networkidle")
+        detail_url = page.url
+
+        rows = _extract_detail_rows(page)
+
+        benefits.append(Benefit(
+            type=section["name"],
+            total_received=total_received,
+            detail_url=detail_url,
+            rows=rows,
+        ))
+
+        page.goto(profile_url, wait_until="networkidle")
+        open_accordion_recebimentos(page)
+
+    return benefits
+
+
+def _extract_total_for_href(page: Page, detail_href: str) -> str:
+    """Lê o valor total da coluna 'Valor Recebido' da linha com o href correspondente."""
+    try:
+        total = page.locator(f"a[href='{detail_href}']").evaluate(
+            "el => el.closest('tr')?.querySelector('td:nth-child(4)')?.innerText?.trim()",
+            timeout=3_000,
+        )
+        return total or ""
+    except Exception:
+        return ""
+
+
+# ── Orquestrador ──────────────────────────────────────────────────────────────
+
+def build_persona_data(page: Page, termo: str) -> PersonaData:
+    """Orquestra todos os extractors e retorna PersonaData populado."""
+    basic       = extract_basic_data(page)
+    profile_url = page.url
+    screenshot  = open_accordion_recebimentos(page)
+    benefits    = extract_all_benefits(page)
 
     return PersonaData(
         name=basic.get("name", ""),
         cpf=basic.get("cpf", ""),
         location=basic.get("location", ""),
-        profile_url=profile_url,
+        links={"profile": profile_url},
         screenshot_png=screenshot,
-        **{k: payments[k] for k in ("benefit_type", "total_received", "detail_url", "benefit_rows")},
+        benefits=benefits,
     )
