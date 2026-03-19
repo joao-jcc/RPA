@@ -82,7 +82,7 @@ class LocalStorage(BaseStorage):
 class GCSStorage(BaseStorage):
     """Salva person.json e screenshot.png no Google Cloud Storage.
 
-    Dependência: pip install google-cloud-storage
+    Dependência: uv add google-cloud-storage
 
     Uso:
         from google.cloud import storage as gcs

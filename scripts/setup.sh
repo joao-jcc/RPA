@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is not installed. Install it first: https://docs.astral.sh/uv/getting-started/installation/"
+  exit 1
+fi
+
+uv sync
 
 echo "All set up!"

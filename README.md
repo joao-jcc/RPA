@@ -3,6 +3,7 @@
 **1. Setup**
 ```bash
 ./scripts/setup.sh
+# Optional: activate the virtualenv created by uv
 source .venv/bin/activate
 ```
 
