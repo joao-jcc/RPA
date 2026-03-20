@@ -35,6 +35,7 @@ export interface Benefit {
 export interface PersonaResponse {
   name: string
   cpf: string
+  nis: string
   location: string
   links: { profile: string }
   benefits: Benefit[]

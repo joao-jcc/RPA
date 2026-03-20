@@ -7,9 +7,9 @@ interface Props {
   status: string
 }
 
-// Dado mais relevante de cada stage — o que aparece em destaque
 function extractHighlight(event: StageEvent): string | null {
   const { stage, message } = event
+
   if (stage === 'found') {
     const match = message.match(/Encontrado:\s*(.+?)(?:\s*—|$)/)
     return match?.[1]?.trim() ?? null
@@ -26,20 +26,21 @@ function extractHighlight(event: StageEvent): string | null {
     const match = message.match(/^(.+?) concluído \((\d+\/\d+)\)/)
     return match ? `${match[1]} ✓ ${match[2]}` : null
   }
-  if (stage === 'uploading') return 'Salvando no Google Drive...'
-  if (stage === 'done') return 'Concluído'
-  if (stage === 'error') return message
+  if (stage === 'uploading') return message   // ← usa a mensagem real do evento
+  if (stage === 'done')      return 'Concluído'
+  if (stage === 'error')     return message
+
   return null
 }
 
 const stageColor: Partial<Record<Stage, string>> = {
-  found: 'text-white',
-  discovered: 'text-accent-blue',
+  found:         'text-white',
+  discovered:    'text-accent-blue',
   benefit_start: 'text-accent-amber',
-  benefit_done: 'text-accent-emerald',
-  uploading: 'text-accent-amber',
-  done: 'text-accent-emerald',
-  error: 'text-accent-red',
+  benefit_done:  'text-accent-emerald',
+  uploading:     'text-accent-amber',
+  done:          'text-accent-emerald',
+  error:         'text-accent-red',
 }
 
 export function ProgressTimeline({ events, status }: Props) {
@@ -54,11 +55,11 @@ export function ProgressTimeline({ events, status }: Props) {
     )
   }
 
-  const last = events[events.length - 1]
+  const last      = events[events.length - 1]
   const highlight = extractHighlight(last)
-  const color = stageColor[last.stage] ?? 'text-white/50'
-  const isError = last.stage === 'error'
-  const isDone = last.stage === 'done'
+  const color     = stageColor[last.stage] ?? 'text-white/50'
+  const isError   = last.stage === 'error'
+  const isDone    = last.stage === 'done'
 
   return (
     <div className="flex items-center gap-2 py-1 min-h-[22px] overflow-hidden">
@@ -70,11 +71,9 @@ export function ProgressTimeline({ events, status }: Props) {
         ? <span className="w-1.5 h-1.5 rounded-full bg-accent-red flex-shrink-0" />
         : <span className="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0" />
       }
-
       <span className="text-[11px] text-white/30 flex-shrink-0 whitespace-nowrap">
         {STAGE_LABELS[last.stage]}
       </span>
-
       {highlight && (
         <>
           <span className="text-white/15 flex-shrink-0">·</span>

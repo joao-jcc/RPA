@@ -23,3 +23,50 @@ export async function authorizeGoogle() {
   if (!res.ok) throw new Error(`Auth failed: ${res.status}`)
   return res.json()
 }
+
+export async function fetchSearches(fromRow: number, toRow: number): Promise<SearchRow[]> {
+  const res = await fetch(`/api/v1/searches?from_row=${fromRow}&to_row=${toRow}`)
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(`Failed to fetch searches: ${res.status}`)
+  return res.json()
+}
+
+// Streaming version — calls onRow for each row as it arrives
+export function streamSearches(
+  fromRow: number,
+  toRow: number,
+  onRow:   (row: SearchRow) => void,
+  onTotal: (count: number) => void,
+  onDone:  (total: number) => void,
+  onError: (msg: string)   => void,
+): () => void {
+  const source = new EventSource(
+    `/api/v1/searches/stream?from_row=${fromRow}&to_row=${toRow}`
+  )
+
+  source.onmessage = (e) => {
+    const data = JSON.parse(e.data)
+    if (data.type === 'total') onTotal(data.count)
+    if (data.type === 'row')   onRow(data as SearchRow)
+    if (data.type === 'done')  { onDone(data.total); source.close() }
+    if (data.type === 'error') { onError(data.message); source.close() }
+  }
+
+  source.onerror = () => {
+    onError('Conexão SSE perdida.')
+    source.close()
+  }
+
+  return () => source.close()
+}
+
+export interface SearchRow {
+  job_id:    string
+  termo:     string
+  nome:      string
+  cpf:       string
+  nis:       string
+  data_hora: string
+  json_url:  string
+  persona:   unknown | null
+}
