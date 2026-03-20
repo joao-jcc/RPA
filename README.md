@@ -1,17 +1,43 @@
-# RPA API
+# RoboGov
 
-**1. Setup**
+Consulta automatizada de benefícios sociais no Portal da Transparência do Governo Federal.
+
+## Pré-requisitos
+
+- Python 3.11+ com [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- Node.js 18+
+- Google Chrome instalado
+
+
+## Configuração
+
+Copie o arquivo de exemplo e preencha com seus dados:
+
 ```bash
-./scripts/setup.sh
-# Optional: activate the virtualenv created by uv
-source .venv/bin/activate
+cp backend/.env.example backend/.env
 ```
 
-**2. Run**
-```bash
-./scripts/run.sh
-```
-API: http://localhost:8000  
-Docs: http://localhost:8000/api/docs
+## Instalação e Execução
 
----
+```bash
+# Backend
+cd backend
+uv sync
+bash scripts/run.sh
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+
+Acesse `http://localhost:5173`
+
+## Google Drive
+
+O projeto usa OAuth2 para salvar os resultados no Google Drive de cada usuário.
+
+O arquivo `client_secret.json` já está incluído no repositório — ele identifica o app no Google, não a sua conta pessoal.
+
+Ao usar pela primeira vez, acesse `http://localhost:8000/api/v1/auth/google` no browser. Uma janela abrirá pedindo autorização. Após confirmar, um `token.json` é salvo localmente em `backend/app/services/google/credentials/` — **esse arquivo é pessoal e não deve ser commitado**.
