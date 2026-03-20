@@ -11,12 +11,15 @@ Estrutura criada no Drive:
 
 Uso:
     storage = GoogleDriveStorage()
-    uri = storage.save(data)
-    # "https://drive.google.com/drive/folders/{folder_id}"
+    result = storage.save(data)
+    # result.folder_url  → "https://drive.google.com/drive/folders/{id}"
+    # result.json_url    → "https://drive.google.com/file/d/{id}/view"
+    # result.json_id     → "{file_id}"  (para leitura via API)
 """
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from io import BytesIO
 
 from googleapiclient.discovery import build
@@ -30,24 +33,24 @@ from app.services.rpa.storage import BaseStorage, _safe_name
 from .auth import get_credentials
 
 
+@dataclass
+class DriveResult:
+    folder_url: str   # URL da pasta da pessoa
+    json_url:   str   # URL direta do person.json
+    json_id:    str   # file_id do person.json (útil para leitura via API)
+
+
 class GoogleDriveStorage(BaseStorage):
-    """Salva person.json e screenshot.png no Google Drive do usuário.
+    """Salva person.json e screenshot.png no Google Drive do usuário."""
 
-    Dependências:
-        uv add google-auth google-auth-oauthlib google-api-python-client
-    """
-
-    def save(self, data: PersonaData, fallback_name: str = "unknown") -> str:
-        """Salva os dados no Drive e retorna a URL da pasta criada.
-
-        Na primeira execução abre o browser para autorização OAuth2.
-        Nas seguintes, usa o token salvo silenciosamente.
+    def save(self, data: PersonaData, fallback_name: str = "unknown") -> DriveResult:
+        """Salva os dados no Drive e retorna DriveResult com as URLs.
 
         Returns:
-            URL da pasta: "https://drive.google.com/drive/folders/{id}"
+            DriveResult com folder_url, json_url e json_id.
 
         Raises:
-            DownloadFailedException: erro ao comunicar com a API do Drive
+            DownloadFailedException: erro ao comunicar com a API do Drive.
         """
         try:
             service = build("drive", "v3", credentials=get_credentials())
@@ -59,20 +62,21 @@ class GoogleDriveStorage(BaseStorage):
                 parent_id=root_id,
             )
 
-            self._upload_json(service, person_id, data)
+            json_file_id = self._upload_json(service, person_id, data)
+
             if data.screenshot_png:
                 self._upload_screenshot(service, person_id, data.screenshot_png)
 
-            return f"https://drive.google.com/drive/folders/{person_id}"
+            return DriveResult(
+                folder_url=f"https://drive.google.com/drive/folders/{person_id}",
+                json_url=f"https://drive.google.com/file/d/{json_file_id}/view",
+                json_id=json_file_id,
+            )
 
         except DownloadFailedException:
             raise
         except RuntimeError as exc:
-            # Não autorizado — mensagem clara para o usuário
-            raise DownloadFailedException(
-                str(exc),
-                cpf=data.cpf or None,
-            ) from exc
+            raise DownloadFailedException(str(exc), cpf=data.cpf or None) from exc
         except Exception as exc:
             raise DownloadFailedException(
                 f"Falha ao salvar no Google Drive: {exc}",
@@ -118,16 +122,18 @@ class GoogleDriveStorage(BaseStorage):
 
     # ── Uploads ───────────────────────────────────────────────────────────────
 
-    def _upload_json(self, service, folder_id: str, data: PersonaData) -> None:
+    def _upload_json(self, service, folder_id: str, data: PersonaData) -> str:
+        """Faz upload do person.json e retorna o file_id."""
         payload = json.dumps(
             data.model_dump(exclude={"screenshot_png"}),
             indent=2,
             ensure_ascii=False,
         ).encode("utf-8")
-        self._upload_file(service, folder_id, "person.json", payload, "application/json")
+        return self._upload_file(service, folder_id, "person.json", payload, "application/json")
 
-    def _upload_screenshot(self, service, folder_id: str, png: bytes) -> None:
-        self._upload_file(service, folder_id, "screenshot.png", png, "image/png")
+    def _upload_screenshot(self, service, folder_id: str, png: bytes) -> str:
+        """Faz upload do screenshot.png e retorna o file_id."""
+        return self._upload_file(service, folder_id, "screenshot.png", png, "image/png")
 
     def _upload_file(
         self,
@@ -136,8 +142,12 @@ class GoogleDriveStorage(BaseStorage):
         filename: str,
         content: bytes,
         mime_type: str,
-    ) -> None:
-        """Upload genérico — atualiza arquivo existente ou cria novo."""
+    ) -> str:
+        """Upload genérico — atualiza arquivo existente ou cria novo.
+
+        Returns:
+            file_id do arquivo criado ou atualizado.
+        """
         media = MediaIoBaseUpload(BytesIO(content), mimetype=mime_type)
 
         results = service.files().list(
@@ -147,13 +157,55 @@ class GoogleDriveStorage(BaseStorage):
 
         existing = results.get("files", [])
         if existing:
-            service.files().update(
+            file = service.files().update(
                 fileId=existing[0]["id"],
-                media_body=media,
-            ).execute()
-        else:
-            service.files().create(
-                body={"name": filename, "parents": [folder_id]},
                 media_body=media,
                 fields="id",
             ).execute()
+            return file["id"]
+
+        file = service.files().create(
+            body={"name": filename, "parents": [folder_id]},
+            media_body=media,
+            fields="id",
+        ).execute()
+        return file["id"]
+
+
+# ── Leitura ───────────────────────────────────────────────────────────────────
+
+def _download_json_by_url(drive_svc, json_url: str) -> dict:
+    """Baixa e parseia o person.json a partir da URL do Drive.
+
+    Extrai o file_id da URL  "https://drive.google.com/file/d/{id}/view"
+    e usa a API do Drive para baixar o conteúdo.
+
+    Returns:
+        Conteúdo do person.json como dict.
+
+    Raises:
+        ValueError: URL fora do formato esperado.
+        Exception: falha na API do Drive.
+    """
+    import json as _json
+    from io import BytesIO
+    from googleapiclient.http import MediaIoBaseDownload
+
+    # Extrai file_id da URL
+    # Formato: https://drive.google.com/file/d/{file_id}/view
+    parts = json_url.rstrip("/").split("/")
+    try:
+        idx     = parts.index("d")
+        file_id = parts[idx + 1]
+    except (ValueError, IndexError) as exc:
+        raise ValueError(f"URL do Drive inválida: {json_url}") from exc
+
+    request = drive_svc.files().get_media(fileId=file_id)
+    buffer  = BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+
+    return _json.loads(buffer.getvalue().decode("utf-8"))

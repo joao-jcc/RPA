@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     GOOGLE_TOKEN_PATH: str = Field(
         default=str(BASE_DIR / "app/services/google/credentials/token.json")
     )
-    GOOGLE_DRIVE_FOLDER_NAME: str = Field(default="rpa-gov-data")
+    GOOGLE_DRIVE_FOLDER_NAME: str = Field(default="rpa-data")
+    GOOGLE_SHEETS_LOG_NAME: str = Field(default="rpa-search")
 
 
 settings = Settings()

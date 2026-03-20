@@ -19,8 +19,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 from app.core import settings
 
-# Escopo mínimo — acesso apenas a arquivos criados pelo próprio app
-_SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+# Escopo: Google Drive e Google Sheets
+_SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/spreadsheets",
+]
 
 
 def get_credentials(authorize_if_missing: bool = False) -> Credentials:

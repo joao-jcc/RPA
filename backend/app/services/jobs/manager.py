@@ -7,16 +7,15 @@ from concurrent.futures import ThreadPoolExecutor
 from app.core import settings
 from app.schemas.persona import PersonaResponse
 from app.services.google.drive_storage import GoogleDriveStorage
+from app.services.google.sheets_log import GoogleSheetsLog
 from app.services.rpa.exceptions import PersonNotFoundException
 
 from .models import JobState, JobStatus, Stage, make_job_id
-
 
 _MAX_WORKERS = 5
 
 
 class JobManager:
-
     def __init__(self) -> None:
         self._lock     = threading.Lock()
         self._jobs:    dict[str, JobState] = {}
@@ -32,10 +31,8 @@ class JobManager:
     def submit(self, termo: str) -> str:
         job_id = make_job_id()
         job    = JobState(job_id=job_id, termo=termo)
-
         with self._lock:
             self._jobs[job_id] = job
-
         self._executor.submit(self._run_job, job)
         return job_id
 
@@ -82,13 +79,21 @@ class JobManager:
                 data = build_persona_data(page, job.termo, progress=job)
 
                 job.emit(Stage.UPLOADING, "Salvando no Google Drive...")
-                uri = GoogleDriveStorage().save(data, fallback_name=job.termo)
+                drive = GoogleDriveStorage().save(data, fallback_name=job.termo)
+
+                job.emit(Stage.UPLOADING, "Registrando na planilha de log...")
+                GoogleSheetsLog().append(
+                    job_id=job.job_id,
+                    termo=job.termo,
+                    data=data,
+                    drive_url=drive.json_url,
+                )
 
                 job.result = PersonaResponse(
                     **data.model_dump(exclude={"screenshot_png"})
                 )
                 job.status = JobStatus.DONE
-                job.emit(Stage.DONE, f"Concluído — {uri}", url=uri)
+                job.emit(Stage.DONE, f"Concluído — {drive.folder_url}", url=drive.folder_url)
 
             except PersonNotFoundException as exc:
                 job.status = JobStatus.FAILED
