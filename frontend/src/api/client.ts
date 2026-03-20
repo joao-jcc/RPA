@@ -12,6 +12,12 @@ export async function fetchJobResult(jobId: string) {
   return res.json()
 }
 
+export async function checkGoogleAuth(): Promise<{ authorized: boolean; reason?: string }> {
+  const res = await fetch('/api/v1/auth/google/status')
+  if (!res.ok) return { authorized: false, reason: 'Erro ao verificar autorização.' }
+  return res.json()
+}
+
 export async function authorizeGoogle() {
   const res = await fetch('/api/v1/auth/google')
   if (!res.ok) throw new Error(`Auth failed: ${res.status}`)

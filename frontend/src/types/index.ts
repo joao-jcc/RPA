@@ -17,6 +17,9 @@ export interface StageEvent {
   total?: number
   url?: string
   timestamp: Date
+  // Extra fields emitted by specific stages
+  benefit_name?: string
+  total_received?: string
 }
 
 // rows podem vir como {columns: {...}} ou diretamente como {chave: valor}

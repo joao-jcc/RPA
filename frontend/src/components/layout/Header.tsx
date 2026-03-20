@@ -1,12 +1,13 @@
 import { Search, Loader2, Activity, CheckCircle2, XCircle } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useApp } from '../../context/AppContext'
-import { submitJob } from '../../api/client'
+import { submitJob, checkGoogleAuth } from '../../api/client'
 
 export function Header() {
   const { state, dispatch } = useApp()
   const [termo, setTermo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const running = state.sessions.filter((s) => s.status === 'running' || s.status === 'pending').length
   const done    = state.sessions.filter((s) => s.status === 'done').length
@@ -18,6 +19,12 @@ export function Header() {
     if (!trimmed || loading) return
     setLoading(true)
     try {
+      const auth = await checkGoogleAuth()
+      if (!auth.authorized) {
+        setAuthError(auth.reason ?? 'Google Drive não autorizado.')
+        return
+      }
+      setAuthError(null)
       const { job_id } = await submitJob(trimmed)
       dispatch({
         type: 'ADD_SESSION',
@@ -25,7 +32,7 @@ export function Header() {
       })
       setTermo('')
     } catch {
-      alert('Falha ao iniciar busca.')
+      setAuthError('Falha ao iniciar busca. Verifique o servidor.')
     } finally {
       setLoading(false)
     }
@@ -64,6 +71,23 @@ export function Header() {
           disabled={loading}
         />
       </form>
+
+      {/* Auth error banner */}
+      {authError && (
+        <div className="absolute top-16 left-[260px] right-0 bg-accent-red/10 border-b border-accent-red/20 px-6 py-2.5 flex items-center justify-between z-10">
+          <span className="text-xs text-accent-red">{authError}</span>
+          <button
+            onClick={async () => {
+              const { authorizeGoogle } = await import('../../api/client')
+              await authorizeGoogle()
+              setAuthError(null)
+            }}
+            className="text-xs font-medium text-accent-red border border-accent-red/30 px-3 py-1 rounded-lg hover:bg-accent-red/10 transition-colors ml-4 flex-shrink-0"
+          >
+            Autorizar agora
+          </button>
+        </div>
+      )}
 
       {/* Spacer */}
       <div className="flex-1" />

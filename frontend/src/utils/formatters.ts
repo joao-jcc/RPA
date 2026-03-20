@@ -1,5 +1,5 @@
-export function timeAgo(date: Date): string {
-  const secs = Math.floor((Date.now() - date.getTime()) / 1000)
+export function timeAgo(date: Date, now: Date = new Date()): string {
+  const secs = Math.floor((now.getTime() - date.getTime()) / 1000)
   if (secs < 60) return `${secs}s atrás`
   const mins = Math.floor(secs / 60)
   if (mins < 60) return `${mins}min atrás`
