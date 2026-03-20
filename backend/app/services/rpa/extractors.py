@@ -67,24 +67,44 @@ def navigate_to_result(page: Page, termo: str, progress: JobState | None = None)
 
 
 # ── Extração de dados básicos ─────────────────────────────────────────────────
-
 def extract_basic_data(page: Page) -> dict[str, str]:
-    """Retorna name, cpf e location da página de perfil."""
+    """Retorna name, cpf, nis e location da página de perfil."""
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(3_000)
 
     result: dict[str, str] = {}
+
     for item in page.locator(".dados-tabelados strong").all():
         label = item.inner_text().strip().lower()
-        value = item.evaluate("el => el.nextElementSibling?.innerText?.trim()")
+
+        # O <span> com o valor é irmão do <strong> dentro do mesmo <div>
+        # Busca pelo span dentro do div pai
+        value = item.evaluate("""el => {
+            const parent = el.parentElement
+            if (!parent) return ''
+            const span = parent.querySelector('span')
+            if (span) return span.innerText.trim()
+            // fallback: percorre nós irmãos
+            let node = el.nextSibling
+            while (node) {
+                const text = node.textContent?.trim()
+                if (text) return text
+                node = node.nextSibling
+            }
+            return ''
+        }""")
+
         if not (label and value):
             continue
+
         if "nome" in label:
             result["name"] = value
         elif "localidade" in label:
             result["location"] = value
         elif "cpf" in label:
             result["cpf"] = value
+        elif "nis" in label:
+            result["nis"] = value.strip()
 
     return result
 
@@ -288,6 +308,7 @@ def build_persona_data(
     return PersonaData(
         name=basic.get("name", ""),
         cpf=basic.get("cpf", ""),
+        nis=basic.get("nis", ""),
         location=basic.get("location", ""),
         links={"profile": profile_url},
         screenshot_png=screenshot,
