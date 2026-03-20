@@ -1,23 +1,38 @@
-"""
-FastAPI Dashboard Backend
-Main application entry point.
-"""
+"""FastAPI Dashboard Backend — Main application entry point."""
+from contextlib import asynccontextmanager
+
+import logging
+
 import uvicorn
 from fastapi import FastAPI
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
 from app.core import settings
+from app.services.jobs import job_manager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Inicia o pool de threads no startup e para no shutdown."""
+    job_manager.start()
+    yield
+    job_manager.stop()
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
     app = FastAPI(
         title=settings.PROJECT_NAME,
         description=settings.DESCRIPTION,
         version=settings.VERSION,
         openapi_url=f"{settings.API_PREFIX}/openapi.json",
         docs_url=f"{settings.API_PREFIX}/docs",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -32,7 +47,6 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     def root():
-        """Health check endpoint."""
         return {
             "message": f"{settings.PROJECT_NAME} is running",
             "version": settings.VERSION,
