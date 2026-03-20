@@ -31,6 +31,21 @@ def authorize_google() -> dict:
     }
 
 
+@router.get(
+    "/google/status",
+    summary="Verifica se o Google Drive está autorizado",
+)
+def google_status() -> dict:
+    """Retorna se o token existe e é válido — sem abrir browser."""
+    try:
+        get_credentials(authorize_if_missing=False)
+        return {"authorized": True}
+    except RuntimeError as exc:
+        return {"authorized": False, "reason": str(exc)}
+    except Exception as exc:
+        return {"authorized": False, "reason": f"Token inválido: {exc}"}
+
+
 @router.delete(
     "/google",
     summary="Revoga autorização do Google Drive",

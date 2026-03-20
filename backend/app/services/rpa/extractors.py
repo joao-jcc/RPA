@@ -233,6 +233,8 @@ def extract_all_benefits(
                     Stage.BENEFIT_DONE,
                     f"{section['name']} concluído ({i}/{total})",
                     current=i, total=total,
+                    total_received=total_received,
+                    benefit_name=section['name'],
                 )
 
         except Exception as exc:
