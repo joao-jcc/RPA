@@ -5,6 +5,8 @@ Nenhuma função aqui decide para onde navegar — isso é responsabilidade do s
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
@@ -12,25 +14,29 @@ from app.schemas.persona import Benefit
 from .exceptions import PersonNotFoundException, PortalTimeoutException
 from .models import PersonaData
 
-URL_BASE = "https://portaldatransparencia.gov.br"
+if TYPE_CHECKING:
+    from app.services.jobs.models import JobState
 
-# Seletor genérico — primeira <table> dentro de qualquer seção de detalhe.
-# Não depende de ids específicos de tabela ou accordion.
+URL_BASE = "https://portaldatransparencia.gov.br"
 _DETAIL_TABLE_SELECTOR = ".content table"
 
 
 # ── Navegação ─────────────────────────────────────────────────────────────────
 
 def accept_cookies(page: Page) -> None:
-    """Dismiss cookie banner if present — fire and forget."""
+    """Dispensa o banner de cookies e aguarda ele sumir."""
     try:
         page.locator("#accept-all-btn").click(timeout=5_000)
-        page.wait_for_timeout(1_000)
+        page.wait_for_selector(
+            "#cookiebar-modal-footer-buttons",
+            state="hidden",
+            timeout=5_000,
+        )
     except Exception:
         pass
 
 
-def navigate_to_result(page: Page, termo: str) -> None:
+def navigate_to_result(page: Page, termo: str, progress: JobState | None = None) -> None:
     """Navega até o perfil da primeira pessoa encontrada para *termo*.
 
     Raises:
@@ -40,7 +46,7 @@ def navigate_to_result(page: Page, termo: str) -> None:
     page.wait_for_timeout(5_000)
     accept_cookies(page)
 
-    page.get_by_role("searchbox").fill(termo)
+    page.locator("#termo").fill(termo)
 
     refine_item = page.locator(".item.bordered").first
     if refine_item.get_attribute("active") is None:
@@ -51,7 +57,7 @@ def navigate_to_result(page: Page, termo: str) -> None:
     page.locator("#btnConsultarPF").click()
 
     try:
-        page.wait_for_selector("#resultados .link-busca-nome", timeout=10_000)
+        page.wait_for_selector("#resultados .link-busca-nome", timeout=15_000)
         page.locator("#resultados .link-busca-nome").first.click()
         page.wait_for_load_state("networkidle")
     except PlaywrightTimeoutError as exc:
@@ -85,20 +91,21 @@ def extract_basic_data(page: Page) -> dict[str, str]:
 
 def open_accordion_recebimentos(page: Page) -> bytes:
     """Expande o accordion de recebimentos e retorna screenshot PNG."""
+    accept_cookies(page)
+
     if page.locator("#accordion1 .item").first.get_attribute("active") is None:
-        page.locator("#accordion1 .item .header").first.click()
+        page.locator("#accordion1 .item button.header").first.click()
 
     try:
         page.wait_for_selector(
             "#accordion-recebimentos-recursos .box-ficha__resultados",
-            timeout=10_000,
+            timeout=15_000,
         )
     except PlaywrightTimeoutError as exc:
         raise PortalTimeoutException(
             "Timeout ao aguardar accordion de recebimentos."
         ) from exc
 
-    accept_cookies(page)
     page.wait_for_timeout(2_000)
     return page.screenshot(type="png", full_page=True)
 
@@ -121,38 +128,31 @@ def _discover_benefit_sections(page: Page) -> list[dict[str, str]]:
 
 
 def _extract_detail_rows(page: Page) -> list[dict[str, str]]:
-    """Extrai todas as linhas da tabela de detalhe do benefício.
-
-    1. Expande qualquer item de accordion fechado na página
-    2. Aguarda a primeira <table> aparecer dentro de .content
-    3. Clica em 'Paginação completa' para carregar todos os registros
-    4. Lê headers e linhas dinamicamente — sem depender de ids fixos
-    """
-    # Expande qualquer accordion fechado na página (sem depender de id)
+    """Extrai todas as linhas da tabela de detalhe do benefício."""
     for item in page.locator(".br-accordion .item").all():
         if item.get_attribute("active") is None:
             item.locator("button.header").click()
             page.wait_for_timeout(1_000)
 
-    # Aguarda a tabela aparecer
     try:
         page.wait_for_selector(_DETAIL_TABLE_SELECTOR, timeout=10_000)
         page.wait_for_timeout(1_000)
     except PlaywrightTimeoutError:
         return []
 
-    # Carrega todos os registros de uma vez
     btn = page.locator("#btnPaginacaoCompleta")
     if btn.count() > 0:
         try:
+            row_count_before = page.locator(f"{_DETAIL_TABLE_SELECTOR} tbody tr").count()
             btn.click(timeout=3_000)
-            page.wait_for_timeout(2_000)
+            page.wait_for_function(
+                f"document.querySelectorAll('{_DETAIL_TABLE_SELECTOR} tbody tr').length > {row_count_before}",
+                timeout=10_000,
+            )
         except Exception:
             pass
 
-    # Lê a tabela com headers dinâmicos
     table = page.locator(_DETAIL_TABLE_SELECTOR).first
-
     headers = [
         th.inner_text().strip()
         for th in table.locator("thead th").all()
@@ -173,39 +173,75 @@ def _extract_detail_rows(page: Page) -> list[dict[str, str]]:
         ]
         if not any(cells):
             continue
-        columns = {
+        rows.append({
             headers[i]: cells[i]
             for i in range(min(len(headers), len(cells)))
             if headers[i]
-        }
-        rows.append(columns)
+        })
 
     return rows
 
 
-def extract_all_benefits(page: Page) -> list[Benefit]:
-    """Detecta e extrai todos os benefícios sociais presentes — sem lista hardcoded."""
+def extract_all_benefits(
+    page: Page,
+    progress: JobState | None = None,
+) -> list[Benefit]:
+    """Extrai todos os benefícios emitindo eventos de progresso."""
     sections = _discover_benefit_sections(page)
     if not sections:
         return []
 
+    total = len(sections)
+    names = ", ".join(s["name"] for s in sections)
+
+    if progress:
+        from app.services.jobs.models import Stage
+        progress.emit(Stage.DISCOVERED, f"{total} benefícios encontrados: {names}")
+
     profile_url = page.url
     benefits: list[Benefit] = []
 
-    for section in sections:
-        total_received = _extract_total_for_href(page, section["detail_href"])
+    for i, section in enumerate(sections, start=1):
+        if progress:
+            from app.services.jobs.models import Stage
+            progress.emit(
+                Stage.BENEFIT_START,
+                f"Extraindo {section['name']}... ({i}/{total})",
+                current=i, total=total,
+            )
 
-        page.goto(f"{URL_BASE}{section['detail_href']}", wait_until="networkidle")
-        detail_url = page.url
+        try:
+            total_received = _extract_total_for_href(page, section["detail_href"])
 
-        rows = _extract_detail_rows(page)
+            page.goto(
+                f"{URL_BASE}{section['detail_href']}",
+                wait_until="networkidle",
+            )
+            detail_url = page.url
+            rows = _extract_detail_rows(page)
 
-        benefits.append(Benefit(
-            type=section["name"],
-            total_received=total_received,
-            detail_url=detail_url,
-            rows=rows,
-        ))
+            benefits.append(Benefit(
+                type=section["name"],
+                total_received=total_received,
+                detail_url=detail_url,
+                rows=rows,
+            ))
+
+            if progress:
+                from app.services.jobs.models import Stage
+                progress.emit(
+                    Stage.BENEFIT_DONE,
+                    f"{section['name']} concluído ({i}/{total})",
+                    current=i, total=total,
+                )
+
+        except Exception as exc:
+            if progress:
+                from app.services.jobs.models import Stage
+                progress.emit(
+                    Stage.ERROR,
+                    f"Erro ao extrair {section['name']}: {exc}",
+                )
 
         page.goto(profile_url, wait_until="networkidle")
         open_accordion_recebimentos(page)
@@ -227,12 +263,25 @@ def _extract_total_for_href(page: Page, detail_href: str) -> str:
 
 # ── Orquestrador ──────────────────────────────────────────────────────────────
 
-def build_persona_data(page: Page, termo: str) -> PersonaData:
-    """Orquestra todos os extractors e retorna PersonaData populado."""
+def build_persona_data(
+    page: Page,
+    termo: str,
+    progress: JobState | None = None,
+) -> PersonaData:
+    """Orquestra todos os extractors emitindo progresso em cada etapa."""
     basic       = extract_basic_data(page)
     profile_url = page.url
-    screenshot  = open_accordion_recebimentos(page)
-    benefits    = extract_all_benefits(page)
+
+    if progress:
+        from app.services.jobs.models import Stage
+        progress.emit(
+            Stage.FOUND,
+            f"Encontrado: {basic.get('name', termo)} — {basic.get('location', '')}",
+        )
+        progress.emit(Stage.OPENING, "Abrindo seção de recebimentos...")
+
+    screenshot = open_accordion_recebimentos(page)
+    benefits   = extract_all_benefits(page, progress=progress)
 
     return PersonaData(
         name=basic.get("name", ""),
