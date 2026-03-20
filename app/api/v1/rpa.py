@@ -91,7 +91,6 @@ def stream_job(job_id: str) -> StreamingResponse:
         # Keepalive imediato — garante que a conexão não fecha por buffering
         yield ": keepalive\n\n"
         for event in job_manager.stream(job_id):
-            print(f"[stream] yielding {event.stage}", flush=True)
             payload = json.dumps({
                 "stage":   event.stage,
                 "message": event.message,
