@@ -8,7 +8,6 @@ Consulta automatizada de benefícios sociais no Portal da Transparência do Gove
 - Node.js 18+
 - Google Chrome instalado
 
-
 ## Configuração
 
 Copie o arquivo de exemplo e preencha com seus dados:
@@ -22,7 +21,7 @@ cp backend/.env.example backend/.env
 ```bash
 # Backend
 cd backend
-uv sync
+bash scripts/setup.sh
 bash scripts/run.sh
 
 # Frontend
@@ -30,7 +29,6 @@ cd frontend
 npm install
 npm run dev
 ```
-
 
 Acesse `http://localhost:5173`
 
