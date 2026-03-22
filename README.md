@@ -41,6 +41,6 @@ O arquivo `client_secret.json` já está incluído no repositório — ele ident
 Ao usar pela primeira vez, acesse `http://localhost:8000/api/v1/auth/google` no browser. Uma janela abrirá pedindo autorização. Após confirmar, um `token.json` é salvo localmente em `backend/app/services/google/credentials/` — **esse arquivo é pessoal e não deve ser commitado**.
 
 <p align="center">
-  <img src="frontend/public/home.png" alt="Tela inicial" width="200" />&nbsp;&nbsp;
-  <img src="frontend/public/dashboard.png" alt="Explorador de dados" width="200" />
+  <img src="frontend/public/home.png" alt="Tela inicial" width="400" />&nbsp;&nbsp;
+  <img src="frontend/public/dashboard.png" alt="Explorador de dados" width="400" />
 </p>
