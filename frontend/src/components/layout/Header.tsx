@@ -51,8 +51,10 @@ export function Header({ onToggleTheme, theme }: HeaderProps) {
   const setToRow = (v: number) =>
     dispatch({ type: 'EXPLORER_SET_RANGE', payload: { fromRow: state.explorer.fromRow, toRow: v } })
 
-  function handleLoad() {
+  async function handleLoad() {
     if (streaming) return
+    const auth = await checkGoogleAuth()
+    if (!auth.authorized) { setAuthError(auth.reason ?? 'Google Drive não autorizado.'); return }
     setStreaming(true)
     dispatch({ type: 'EXPLORER_RESET_ROWS' })
     streamSearches(fromRow, toRow,
@@ -127,11 +129,11 @@ export function Header({ onToggleTheme, theme }: HeaderProps) {
                   placeholder="Linha Y"
                 />
               </div>
-              <button onClick={handleLoad} disabled={streaming}
+              <button onClick={() => { handleLoad() }} disabled={streaming}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
                 style={{ background: 'var(--accent)', color: 'white' }}>
                 <RefreshCcw size={13} className={streaming ? 'animate-spin' : ''} />
-                {streaming ? 'Sincronizando...' : 'Carregar Drive'}
+                {streaming ? 'Sincronizando...' : 'Sync from Drive'}
               </button>
               {streaming && <span className="text-xs font-mono" style={{ color: 'var(--faint)' }}>{state.explorer.rows.length} / {toRow - fromRow + 1}</span>}
             </div>
@@ -170,17 +172,48 @@ export function Header({ onToggleTheme, theme }: HeaderProps) {
         </div>
       </header>
 
+      {/* Google Drive Auth Modal */}
       {authError && (
-        <div className="fixed top-14 left-[220px] right-0 px-5 py-2 flex items-center justify-between z-10"
-          style={{ background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
-          <span className="text-xs" style={{ color: '#EF4444' }}>{authError}</span>
-          <button
-            onClick={async () => { const { authorizeGoogle } = await import('../../api/client'); await authorizeGoogle(); setAuthError(null) }}
-            className="text-xs font-medium px-3 py-1 rounded-lg ml-4"
-            style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setAuthError(null)}
+        >
+          <div
+            className="w-full max-w-sm mx-4 rounded-2xl p-6 shadow-2xl"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            Autorizar agora
-          </button>
+            {/* Text */}
+            <div className="text-center mb-5">
+              <h3 className="text-base font-bold mb-1.5" style={{ color: 'var(--text)' }}>
+                Conecte o Google Drive
+              </h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+                Para salvar os resultados das pesquisas, é necessário autorizar o acesso ao Google Drive.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  import('../../api/client').then(({ authorizeGoogle }) => authorizeGoogle())
+                  setAuthError(null)
+                }}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{ background: 'var(--accent)', color: 'white' }}
+              >
+                Autorizar Google Drive
+              </button>
+              <button
+                onClick={() => setAuthError(null)}
+                className="w-full py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ background: 'var(--surface2)', color: 'var(--muted)' }}
+              >
+                Agora não
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>
