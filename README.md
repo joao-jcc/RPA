@@ -38,7 +38,9 @@ O projeto usa OAuth2 para salvar os resultados no Google Drive de cada usuário.
 
 O arquivo `client_secret.json` já está incluído no repositório — ele identifica o app no Google, não a sua conta pessoal.
 
-Ao usar pela primeira vez, acesse `http://localhost:8000/api/v1/auth/google` no browser. Uma janela abrirá pedindo autorização. Após confirmar, um `token.json` é salvo localmente em `backend/app/services/google/credentials/` — **esse arquivo é pessoal e não deve ser commitado**.
+Ao usar pela primeira vez, clique em 'Autorizar Google Drive' na sidebar. Uma janela abrirá pedindo autorização. Após confirmar, um `token.json` é salvo localmente em `backend/app/services/google/credentials/` — **esse arquivo é pessoal e não deve ser commitado**. 
+
+**Obs.:** Como este é um MVP, o app que oferece a api da Google Drive não foi verificado pela Google, por isso deve-se clicar em 'Advanced' e 'Go to rpa-service-gov' na página de alerta para autenticação completa.
 
 <p align="center">
   <img src="frontend/public/home.png" alt="Tela inicial" width="49%" />&nbsp;&nbsp;
