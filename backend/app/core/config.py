@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     RPA_DOWNLOADS_DIR: str = Field(
         default=str(BASE_DIR / "app/services/rpa/downloads")
     )
+    MAX_WORKER_JOBS: int = Field(default=5, ge=1)
+    MAX_JOB_RETRIES: int = Field(default=3, ge=1)
 
     # Google OAuth2
     GOOGLE_CLIENT_ID: str = Field(default="")
