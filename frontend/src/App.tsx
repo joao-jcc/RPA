@@ -4,13 +4,16 @@ import { Header } from './components/layout/Header'
 import { Home } from './pages/Home'
 import { DataExplorer } from './pages/DataExplorer'
 import { AppProvider } from './context/AppContext'
+import { useTheme } from './hooks/useTheme'
 
 function Layout() {
+  const { theme, toggle } = useTheme()
+
   return (
-    <div className="min-h-screen bg-navy-950 text-white">
-      <Header />
+    <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+      <Header onToggleTheme={toggle} theme={theme} />
       <Sidebar />
-      <main className="ml-[260px] pt-16 min-h-screen">
+      <main className="ml-[220px] pt-14 min-h-screen">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/data" element={<DataExplorer />} />

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Database, ExternalLink } from 'lucide-react'
+import { LayoutDashboard, Database } from 'lucide-react'
 import { authorizeGoogle } from '../../api/client'
 
 const navItems = [
@@ -18,34 +18,73 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-[260px] bg-navy-900 border-r border-white/[0.06] flex flex-col z-10">
-      <nav className="flex-1 py-4 px-3 space-y-1">
+    <aside
+      className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-[220px] flex flex-col z-10"
+      style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}
+    >
+      {/* Nav label */}
+      <div className="px-5 pt-5 pb-2">
+        <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--faint)' }}>
+          Principal
+        </span>
+      </div>
+
+      <nav className="flex-1 px-3 space-y-0.5">
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-white/[0.08] text-white border-l-2 border-accent-blue pl-[14px]'
-                  : 'text-white/45 hover:text-white/75 hover:bg-white/[0.04]'
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ${
+                isActive ? 'active-nav' : ''
               }`
             }
+            style={({ isActive }) => ({
+              background: isActive ? 'var(--accent-light)' : 'transparent',
+              color: isActive ? 'var(--accent)' : 'var(--muted)',
+            })}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLElement
+              if (!el.classList.contains('active-nav')) {
+                el.style.background = 'var(--hover)'
+                el.style.color = 'var(--text)'
+              }
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLElement
+              if (!el.classList.contains('active-nav')) {
+                el.style.background = 'transparent'
+                el.style.color = 'var(--muted)'
+              }
+            }}
           >
-            <Icon size={17} />
-            {label}
+            {({ isActive }) => (
+              <>
+                <Icon size={16} style={{ color: isActive ? 'var(--accent)' : undefined }} />
+                <span>{label}</span>
+                {isActive && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="px-3 pb-5 border-t border-white/[0.06] pt-3 flex-shrink-0">
+      {/* Auth button */}
+      <div className="px-3 pb-4 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
         <button
           onClick={handleAuth}
-          className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm text-white/35 hover:text-white/65 hover:bg-white/[0.04] transition-all duration-150"
+          className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+          style={{ color: 'var(--accent)', background: 'var(--accent-light)' }}
         >
-          <ExternalLink size={15} />
-          Autorizar Drive
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Autorizar Google Drive
         </button>
       </div>
     </aside>
