@@ -9,38 +9,24 @@ interface Props {
 
 function extractHighlight(event: StageEvent): string | null {
   const { stage, message } = event
-
-  if (stage === 'found') {
-    const match = message.match(/Encontrado:\s*(.+?)(?:\s*—|$)/)
-    return match?.[1]?.trim() ?? null
-  }
-  if (stage === 'discovered') {
-    const match = message.match(/^(\d+\s+benefício[s]?\s+encontrado[s]?)/)
-    return match?.[1] ?? null
-  }
-  if (stage === 'benefit_start') {
-    const match = message.match(/Extraindo\s+(.+?)\.\.\. \((\d+\/\d+)\)/)
-    return match ? `${match[1]} (${match[2]})` : null
-  }
-  if (stage === 'benefit_done') {
-    const match = message.match(/^(.+?) concluído \((\d+\/\d+)\)/)
-    return match ? `${match[1]} ✓ ${match[2]}` : null
-  }
-  if (stage === 'uploading') return message   // ← usa a mensagem real do evento
-  if (stage === 'done')      return 'Concluído'
-  if (stage === 'error')     return message
-
+  if (stage === 'found') return message.match(/Encontrado:\s*(.+?)(?:\s*—|$)/)?.[1]?.trim() ?? null
+  if (stage === 'discovered') return message.match(/^(\d+\s+benefício[s]?\s+encontrado[s]?)/)?.[1] ?? null
+  if (stage === 'benefit_start') { const m = message.match(/Extraindo\s+(.+?)\.\.\.\s*\((\d+\/\d+)\)/); return m ? `${m[1]} (${m[2]})` : null }
+  if (stage === 'benefit_done')  { const m = message.match(/^(.+?) concluído \((\d+\/\d+)\)/); return m ? `${m[1]} ✓ ${m[2]}` : null }
+  if (stage === 'uploading') return message
+  if (stage === 'done')  return 'Concluído'
+  if (stage === 'error') return message
   return null
 }
 
 const stageColor: Partial<Record<Stage, string>> = {
-  found:         'text-white',
-  discovered:    'text-accent-blue',
-  benefit_start: 'text-accent-amber',
-  benefit_done:  'text-accent-emerald',
-  uploading:     'text-accent-amber',
-  done:          'text-accent-emerald',
-  error:         'text-accent-red',
+  found:         'var(--text)',
+  discovered:    'var(--accent)',
+  benefit_start: '#F59E0B',
+  benefit_done:  '#10B981',
+  uploading:     '#F59E0B',
+  done:          '#10B981',
+  error:         '#EF4444',
 }
 
 export function ProgressTimeline({ events, status }: Props) {
@@ -48,36 +34,34 @@ export function ProgressTimeline({ events, status }: Props) {
 
   if (events.length === 0) {
     return (
-      <div className="flex items-center gap-2 py-1 min-h-[22px]">
-        <Loader2 size={11} className="text-white/25 animate-spin flex-shrink-0" />
-        <span className="text-xs text-white/25">Iniciando...</span>
+      <div className="flex items-center gap-2 py-0.5">
+        <Loader2 size={11} className="animate-spin flex-shrink-0" style={{ color: 'var(--faint)' }} />
+        <span className="text-xs" style={{ color: 'var(--faint)' }}>Iniciando...</span>
       </div>
     )
   }
 
   const last      = events[events.length - 1]
   const highlight = extractHighlight(last)
-  const color     = stageColor[last.stage] ?? 'text-white/50'
+  const color     = stageColor[last.stage] ?? 'var(--muted)'
   const isError   = last.stage === 'error'
   const isDone    = last.stage === 'done'
 
   return (
-    <div className="flex items-center gap-2 py-1 min-h-[22px] overflow-hidden">
+    <div className="flex items-center gap-2 py-0.5 overflow-hidden">
       {isRunning && !isError
-        ? <Loader2 size={11} className="text-accent-blue animate-spin flex-shrink-0" />
-        : isDone
-        ? <span className="w-1.5 h-1.5 rounded-full bg-accent-emerald flex-shrink-0" />
-        : isError
-        ? <span className="w-1.5 h-1.5 rounded-full bg-accent-red flex-shrink-0" />
-        : <span className="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0" />
+        ? <Loader2 size={11} className="animate-spin flex-shrink-0" style={{ color: 'var(--accent)' }} />
+        : <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{
+            background: isDone ? '#10B981' : isError ? '#EF4444' : 'var(--faint)'
+          }} />
       }
-      <span className="text-[11px] text-white/30 flex-shrink-0 whitespace-nowrap">
+      <span className="text-xs flex-shrink-0 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
         {STAGE_LABELS[last.stage]}
       </span>
       {highlight && (
         <>
-          <span className="text-white/15 flex-shrink-0">·</span>
-          <span className={`text-xs font-medium truncate transition-all duration-300 ${color}`}>
+          <span style={{ color: 'var(--border)' }} className="flex-shrink-0">·</span>
+          <span className="text-xs font-medium truncate" style={{ color }}>
             {highlight}
           </span>
         </>
