@@ -1,8 +1,13 @@
 """JobManager — múltiplos jobs em paralelo, cada um com seu próprio Playwright."""
 from __future__ import annotations
+import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from app.core import settings
+
+# metrics.jsonl fica na raiz do pacote backend (um nível acima de app/)
+_METRICS_FILE = Path(__file__).parents[3] / "metrics.jsonl"
 from app.schemas.persona import PersonaResponse
 from app.services.google.drive_storage import GoogleDriveStorage
 from app.services.google.sheets_log import GoogleSheetsLog
@@ -55,6 +60,7 @@ class JobManager:
         for attempt in range(1, max_retries + 1):
             try:
                 self._attempt(job, attempt)
+                self._write_metrics(job)
                 return  # sucesso — sai do loop
             except PersonNotFoundException as exc:
                 # Pessoa não encontrada — não adianta tentar de novo
@@ -62,6 +68,7 @@ class JobManager:
                 job.error  = str(exc)
                 job.emit(Stage.ERROR, str(exc))
                 job.close()
+                self._write_metrics(job)
                 return
             except Exception as exc:
                 last_exc = exc
@@ -85,6 +92,7 @@ class JobManager:
         job.error  = str(last_exc)
         job.emit(Stage.ERROR, f"Erro após {attempt} tentativa(s): {last_exc}")
         job.close()
+        self._write_metrics(job)
 
     def _attempt(self, job: JobState, attempt: int) -> None:
         """Uma tentativa completa de execução com Playwright."""
@@ -139,6 +147,20 @@ class JobManager:
                 browser.close()
 
         job.close()
+
+    def _write_metrics(self, job: JobState) -> None:
+        """Persiste os timings do job em metrics.jsonl (uma linha JSON por run)."""
+        try:
+            record = {
+                "job_id":  job.job_id,
+                "termo":   job.termo,
+                "status":  job.status.value,
+                "timings": job.get_timings(),
+            }
+            with _METRICS_FILE.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            print(f"[metrics] Falha ao salvar métricas: {exc}", flush=True)
 
 
 job_manager = JobManager()

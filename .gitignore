@@ -6,6 +6,10 @@ downloads/
 token.json
 .DS_Store
 
+# Métricas de benchmark (geradas em runtime)
+backend/metrics.jsonl
+backend/metrics_chart.png
+
 # Frontend (Vite/React)
 frontend/node_modules/
 frontend/dist/

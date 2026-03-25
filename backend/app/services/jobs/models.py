@@ -47,13 +47,26 @@ class JobState:
         self.status   = JobStatus.PENDING
         self.result   = None          # PersonaResponse quando done
         self.error    = None          # mensagem de erro fatal
-        self._events: Queue[StageEvent | None] = Queue()
+        self._events:     Queue[StageEvent | None] = Queue()
+        self._last_stage: Stage | None = None
+        self._timings:    dict[str, datetime] = {}  # primeira ocorrência por stage
 
     def emit(self, stage: Stage, message: str, **data) -> None:
         """Emite um evento de progresso — chamado pelo extractor."""
         event = StageEvent(stage=stage, message=message, data=data)
         print(f"[emit] {stage} — {message}", flush=True)
+        self._last_stage = stage
+        if stage.value not in self._timings:
+            self._timings[stage.value] = event.timestamp
         self._events.put(event)
+
+    def last_stage(self) -> Stage | None:
+        """Retorna o último stage emitido."""
+        return self._last_stage
+
+    def get_timings(self) -> dict[str, str]:
+        """Retorna timestamps ISO 8601 da primeira ocorrência de cada stage."""
+        return {stage: ts.isoformat() for stage, ts in self._timings.items()}
 
     def close(self) -> None:
         """Sinaliza fim do stream — None é o sentinel."""
