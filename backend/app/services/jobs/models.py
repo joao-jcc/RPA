@@ -92,7 +92,8 @@ class JobState:
             except Empty:
                 waited += poll_interval
                 if self.status in (JobStatus.DONE, JobStatus.FAILED):
-                    # Job terminou — drena o que sobrou e fecha
+                    # Job terminou mas pode ter sobrado eventos na fila
+                    # (race condition: status mudou antes do sentinel chegar)
                     while True:
                         try:
                             event = self._events.get_nowait()

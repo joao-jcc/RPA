@@ -12,7 +12,9 @@ from app.schemas.persona import PersonaResponse
 from app.services.google.drive_storage import GoogleDriveStorage
 from app.services.google.sheets_log import GoogleSheetsLog
 from app.services.rpa.exceptions import PersonNotFoundException
-from .models import JobState, JobStatus, Stage, make_job_id
+
+# intermediários entre o consumidor (rotas sse) e o produtor (extractor emit())
+from .models import JobState, JobStatus, Stage, make_job_id 
 
 # Estágios que indicam que a pessoa foi encontrada — retry vale a pena
 _RETRY_THRESHOLD = {
@@ -114,7 +116,8 @@ class JobManager:
                 viewport={"width": 1280, "height": 800},
             )
             page = context.new_page()
-            page.set_default_timeout(120_000)
+            # timeout para todas as ações do playwright que não especificam um timeout
+            page.set_default_timeout(120_000) 
 
             try:
                 from app.services.rpa.extractors import build_persona_data, navigate_to_result

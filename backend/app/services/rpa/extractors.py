@@ -46,20 +46,20 @@ def navigate_to_result(page: Page, termo: str, progress: JobState | None = None)
     page.wait_for_timeout(5_000)
     accept_cookies(page)
 
-    page.locator("#termo").fill(termo)
+    page.locator("#termo").fill(termo) # preenche o campo de busca com o termo
 
-    refine_item = page.locator(".item.bordered").first
+    refine_item = page.locator(".item.bordered").first # seção de filtros de refinamento
     if refine_item.get_attribute("active") is None:
-        refine_item.locator(".header").click()
+        refine_item.locator(".header").click() # expande a seção de filtros de refinamento
     page.wait_for_timeout(1_000)
 
-    page.locator("label[for='beneficiarioProgramaSocial']").click()
+    page.locator("label[for='beneficiarioProgramaSocial']").click() # marca o checkbox de beneficiário do programa social
     page.locator("#btnConsultarPF").click()
 
     try:
         page.wait_for_selector("#resultados .link-busca-nome", timeout=15_000)
-        page.locator("#resultados .link-busca-nome").first.click()
-        page.wait_for_load_state("networkidle")
+        page.locator("#resultados .link-busca-nome").first.click() # clica no primeiro resultado (podemos melhorar isso para clicar no resultado mais relevante)
+        page.wait_for_load_state("networkidle") # espera até que a página carregue completamente
     except PlaywrightTimeoutError as exc:
         raise PersonNotFoundException(
             f"Nenhum resultado encontrado para o termo: '{termo}'."
@@ -74,6 +74,7 @@ def extract_basic_data(page: Page) -> dict[str, str]:
 
     result: dict[str, str] = {}
 
+    # extrai os dados da página de perfil 
     for item in page.locator(".dados-tabelados strong").all():
         label = item.inner_text().strip().lower()
 
@@ -96,7 +97,9 @@ def extract_basic_data(page: Page) -> dict[str, str]:
 
         if not (label and value):
             continue
-
+        
+        # hardcode para extrair os dados da página de perfil
+        # Não está genérico, mas é o que precisamos para o momento
         if "nome" in label:
             result["name"] = value
         elif "localidade" in label:

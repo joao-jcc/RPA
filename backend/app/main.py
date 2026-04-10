@@ -1,4 +1,4 @@
-"""FastAPI Dashboard Backend — Main application entry point."""
+"""FastAPI - Main application entry point."""
 from contextlib import asynccontextmanager
 
 import logging
@@ -35,8 +35,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Intermediário entre frontend e backend
     app.add_middleware(
-        CORSMiddleware,
+        CORSMiddleware,  # Ao deployar configurar os origins permitidos
         allow_origins=["*"],
         allow_credentials=False,
         allow_methods=["*"],
